@@ -3,18 +3,22 @@
 import React, { useState } from "react";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { EmptyState } from "@/components/ui/empty-state";
-import { MoreVerticalIcon, ServersIcon } from "@/components/ui/icons";
+import { ServersIcon } from "@/components/ui/icons";
 import { StatusBadge } from "@/components/ui/badge";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ServerItem } from "@/lib/types";
 
 export function ServersTable({
   servers,
   onEdit,
+  onDelete,
 }: {
   servers: ServerItem[];
   onEdit?: (server: ServerItem) => void;
+  onDelete?: (server: ServerItem) => void;
 }) {
   const [searchTerm, setSearchTerm] = useState("");
+  const [deletingServer, setDeletingServer] = useState<ServerItem | null>(null);
 
   const filtered = servers.filter(
     (s) =>
@@ -75,19 +79,43 @@ export function ServersTable({
                     <StatusBadge status={srv.status} />
                   </td>
                   <td className="py-3.5 pl-2 pr-5 text-right">
-                    <button
-                      onClick={() => onEdit?.(srv)}
-                      className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-                      title="Manage server"
-                    >
-                      <MoreVerticalIcon className="size-4" />
-                    </button>
+                    <div className="inline-flex items-center gap-1">
+                      <button
+                        onClick={() => onEdit?.(srv)}
+                        className="rounded px-2 py-1 text-xs text-blue-600 hover:bg-blue-50 font-medium"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => setDeletingServer(srv)}
+                        className="rounded px-2 py-1 text-xs text-rose-600 hover:bg-rose-50 font-medium"
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+      )}
+
+      {deletingServer && (
+        <ConfirmDialog
+          isOpen={Boolean(deletingServer)}
+          onClose={() => setDeletingServer(null)}
+          onConfirm={() => {
+            if (deletingServer) {
+              onDelete?.(deletingServer);
+              setDeletingServer(null);
+            }
+          }}
+          title="Delete Server"
+          description={`Are you sure you want to delete server "${deletingServer.name}"? If it is referenced by deployment targets or deployment history, deletion will be safely rejected.`}
+          confirmLabel="Delete Server"
+          variant="danger"
+        />
       )}
     </div>
   );

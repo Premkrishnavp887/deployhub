@@ -3,18 +3,22 @@
 import React, { useState } from "react";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { EmptyState } from "@/components/ui/empty-state";
-import { MoreVerticalIcon, ApplicationsIcon } from "@/components/ui/icons";
+import { ApplicationsIcon } from "@/components/ui/icons";
 import { StatusBadge } from "@/components/ui/badge";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ApplicationItem } from "@/lib/types";
 
 export function ApplicationsTable({
   applications,
   onEdit,
+  onDelete,
 }: {
   applications: ApplicationItem[];
   onEdit?: (app: ApplicationItem) => void;
+  onDelete?: (app: ApplicationItem) => void;
 }) {
   const [searchTerm, setSearchTerm] = useState("");
+  const [deletingApp, setDeletingApp] = useState<ApplicationItem | null>(null);
 
   const filtered = applications.filter(
     (a) =>
@@ -75,19 +79,43 @@ export function ApplicationsTable({
                     <StatusBadge status={app.status} />
                   </td>
                   <td className="py-3.5 pl-2 pr-5 text-right">
-                    <button
-                      onClick={() => onEdit?.(app)}
-                      className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-                      title="Edit application"
-                    >
-                      <MoreVerticalIcon className="size-4" />
-                    </button>
+                    <div className="inline-flex items-center gap-1">
+                      <button
+                        onClick={() => onEdit?.(app)}
+                        className="rounded px-2 py-1 text-xs text-blue-600 hover:bg-blue-50 font-medium"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => setDeletingApp(app)}
+                        className="rounded px-2 py-1 text-xs text-rose-600 hover:bg-rose-50 font-medium"
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+      )}
+
+      {deletingApp && (
+        <ConfirmDialog
+          isOpen={Boolean(deletingApp)}
+          onClose={() => setDeletingApp(null)}
+          onConfirm={() => {
+            if (deletingApp) {
+              onDelete?.(deletingApp);
+              setDeletingApp(null);
+            }
+          }}
+          title="Delete Application"
+          description={`Are you sure you want to delete application "${deletingApp.name}"? If it is referenced by deployment targets or deployment history, deletion will be safely rejected.`}
+          confirmLabel="Delete Application"
+          variant="danger"
+        />
       )}
     </div>
   );
