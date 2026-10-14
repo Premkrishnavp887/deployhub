@@ -1,0 +1,102 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum DeploymentStatus {
+  QUEUED
+  RUNNING
+  SUCCESS
+  FAILURE
+  ABORTED
+}
+
+enum Environment {
+  DEVELOPMENT
+  STAGING
+  PRODUCTION
+  OTHER
+}
+
+model Application {
+  id              String              @id @default(cuid())
+  name            String              @unique
+  localPath       String
+  gitRemote       String              @default("origin")
+  defaultBranch   String              @default("main")
+  imageName       String
+  composeFile     String              @default("docker-compose.yml")
+  tagEnvVar       String              @default("tag")
+  buildPlatform   String?
+  noCache         Boolean             @default(false)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  targets         DeploymentTarget[]
+  deployments     Deployment[]
+}
+
+model Server {
+  id                 String              @id @default(cuid())
+  name               String              @unique
+  host               String
+  port               Int                 @default(22)
+  sshUsername        String
+  jenkinsCredentialId String
+  knownHostFingerprint String
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  targets            DeploymentTarget[]
+  deployments        Deployment[]
+}
+
+model DeploymentTarget {
+  id                String      @id @default(cuid())
+  name              String
+  environment       Environment @default(OTHER)
+  applicationId     String
+  serverId          String
+  remotePath        String
+  composeFile       String      @default("docker-compose.yml")
+  tagEnvVar         String      @default("tag")
+  enabled           Boolean     @default(true)
+  requireApproval   Boolean     @default(false)
+  application       Application @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+  server            Server      @relation(fields: [serverId], references: [id], onDelete: Restrict)
+  deployments       Deployment[]
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  @@unique([applicationId, serverId, name])
+}
+
+model Deployment {
+  id                String           @id @default(cuid())
+  applicationId     String
+  serverId          String
+  targetId          String
+  branch            String
+  requestedTag      String
+  commitSha         String?
+  message           String
+  status            DeploymentStatus @default(QUEUED)
+  jenkinsBuildNumber Int?
+  jenkinsBuildUrl   String?
+  startedAt         DateTime?
+  finishedAt        DateTime?
+  durationSeconds   Int?
+  healthCheckPassed Boolean?
+  notificationStatus String?
+  failureSummary    String?
+  createdAt         DateTime         @default(now())
+  application       Application      @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+  server            Server           @relation(fields: [serverId], references: [id], onDelete: Restrict)
+  target            DeploymentTarget @relation(fields: [targetId], references: [id], onDelete: Restrict)
+
+  @@index([createdAt])
+  @@index([status, createdAt])
+  @@index([applicationId, requestedTag])
+}
