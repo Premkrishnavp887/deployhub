@@ -13,10 +13,12 @@ export function ApplicationForm({
   onCancel,
   onSave,
   initialData,
+  serverError,
 }: {
   onCancel: () => void;
-  onSave: (data: Partial<ApplicationItem>) => void;
+  onSave: (data: Partial<ApplicationItem>) => Promise<boolean>;
   initialData?: ApplicationItem | null;
+  serverError?: string | null;
 }) {
   const [name, setName] = useState(initialData?.name || "");
   const [imageName, setImageName] = useState(initialData?.imageName || "");
@@ -27,26 +29,40 @@ export function ApplicationForm({
   const [defaultBranch, setDefaultBranch] = useState(initialData?.defaultBranch || "main");
   const [buildCache, setBuildCache] = useState(!initialData?.noCache);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [localError, setLocalError] = useState("");
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const error = localError || serverError;
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !imageName.trim() || !localPath.trim()) {
-      setError("Please fill in all required fields.");
+      setLocalError("Please fill in all required fields.");
+      return;
+    }
+    if (!localPath.startsWith("/")) {
+      setLocalError("Project path must be an absolute path starting with /.");
       return;
     }
     setLoading(true);
-    onSave({
-      name,
-      imageName,
-      localPath,
-      composeFile,
-      gitRemote,
-      buildPlatform,
-      defaultBranch,
-      noCache: !buildCache,
-      status: "Active",
-    });
+    setLocalError("");
+
+    try {
+      await onSave({
+        name,
+        imageName,
+        localPath,
+        composeFile,
+        gitRemote,
+        buildPlatform,
+        defaultBranch,
+        noCache: !buildCache,
+        status: "Active",
+      });
+    } catch (err: unknown) {
+      setLocalError(err instanceof Error ? err.message : "Failed to save application.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -96,16 +112,7 @@ export function ApplicationForm({
               required
               value={localPath}
               onChange={(e) => setLocalPath(e.target.value)}
-              placeholder="/home/prem/SAM/..."
-              actionButton={
-                <button
-                  type="button"
-                  onClick={() => setLocalPath("/home/prem/deployhub-starter")}
-                  className="rounded bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-200"
-                >
-                  Browse
-                </button>
-              }
+              placeholder="/home/user/project..."
             />
             <Input
               label="Docker Compose File"

@@ -12,10 +12,12 @@ export function ServerForm({
   onCancel,
   onSave,
   initialData,
+  serverError,
 }: {
   onCancel: () => void;
-  onSave: (data: Partial<ServerItem>) => void;
+  onSave: (data: Partial<ServerItem>) => Promise<boolean>;
   initialData?: ServerItem | null;
+  serverError?: string | null;
 }) {
   const [name, setName] = useState(initialData?.name || "");
   const [host, setHost] = useState(initialData?.host || "");
@@ -27,40 +29,40 @@ export function ServerForm({
   const [knownHostFingerprint, setKnownHostFingerprint] = useState(
     initialData?.knownHostFingerprint || ""
   );
-  const [verifyStatus, setVerifyStatus] = useState<"idle" | "verifying" | "verified">("idle");
-  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [localError, setLocalError] = useState("");
 
-  const handleVerify = () => {
-    if (!host) {
-      setError("Please enter a Host/IP before verifying.");
-      return;
-    }
-    setVerifyStatus("verifying");
-    setTimeout(() => {
-      setVerifyStatus("verified");
-      if (!knownHostFingerprint) {
-        setKnownHostFingerprint("SHA256:4a8bc39d71e290f6b3d14e82ca31a0e882f091bc");
-      }
-    }, 700);
-  };
+  const error = localError || serverError;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !host.trim() || !sshUsername.trim()) {
-      setError("Please fill in all required fields.");
+    if (!name.trim() || !host.trim() || !sshUsername.trim() || !knownHostFingerprint.trim()) {
+      setLocalError("Please fill in all required fields including the verified fingerprint.");
       return;
     }
+    const portNum = parseInt(port, 10);
+    if (isNaN(portNum) || portNum < 1 || portNum > 65535) {
+      setLocalError("Port must be a valid integer between 1 and 65535.");
+      return;
+    }
+
     setLoading(true);
-    onSave({
-      name,
-      host,
-      port: parseInt(port, 10) || 22,
-      sshUsername,
-      jenkinsCredentialId,
-      knownHostFingerprint: knownHostFingerprint || "SHA256:verified_host_key",
-      status: "Online",
-    });
+    setLocalError("");
+    try {
+      await onSave({
+        name,
+        host,
+        port: portNum,
+        sshUsername,
+        jenkinsCredentialId,
+        knownHostFingerprint,
+        status: "Online",
+      });
+    } catch (err: unknown) {
+      setLocalError(err instanceof Error ? err.message : "Failed to save server.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -115,13 +117,7 @@ export function ServerForm({
               required
               value={host}
               onChange={(e) => setHost(e.target.value)}
-              placeholder="e.g. 192.168.11.112"
-            />
-            <Input
-              label="SSH Host Fingerprint"
-              value={knownHostFingerprint}
-              onChange={(e) => setKnownHostFingerprint(e.target.value)}
-              placeholder="e.g. SHA256:oxxx98124890..."
+              placeholder="e.g. 192.168.11.112 or prod.example.com"
             />
             <Input
               label="SSH Port"
@@ -129,34 +125,6 @@ export function ServerForm({
               onChange={(e) => setPort(e.target.value)}
               placeholder="22"
             />
-
-            {/* Host Key Verification Box */}
-            <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-4 space-y-3">
-              <div className="flex items-start gap-2">
-                <span className="text-blue-600 font-bold text-xs mt-0.5">ℹ</span>
-                <div>
-                  <h4 className="text-xs font-semibold text-slate-900">Host Key Verification</h4>
-                  <p className="text-[11px] text-slate-500 mt-0.5">
-                    Verify the SSH host fingerprint before saving. Do not add untrusted servers.
-                  </p>
-                </div>
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleVerify}
-                disabled={verifyStatus === "verifying"}
-                className="w-full text-xs"
-              >
-                {verifyStatus === "verifying"
-                  ? "Verifying Fingerprint..."
-                  : verifyStatus === "verified"
-                  ? "✓ Fingerprint Verified"
-                  : "Verify Connection"}
-              </Button>
-            </div>
-
             <Input
               label="SSH Username"
               required
@@ -164,6 +132,33 @@ export function ServerForm({
               onChange={(e) => setSshUsername(e.target.value)}
               placeholder="e.g. ai or ubuntu"
             />
+            <Input
+              label="Verified SSH Host Fingerprint"
+              required
+              value={knownHostFingerprint}
+              onChange={(e) => setKnownHostFingerprint(e.target.value)}
+              placeholder="SHA256:..."
+            />
+
+            {/* Trusted Verification Guidance */}
+            <div className="md:col-span-2 rounded-xl border border-blue-100 bg-blue-50/60 p-4 space-y-2">
+              <div className="flex items-start gap-2">
+                <span className="text-blue-600 font-bold text-xs mt-0.5">ℹ</span>
+                <div className="space-y-1">
+                  <h4 className="text-xs font-semibold text-slate-900">
+                    Trusted Host Fingerprint Verification
+                  </h4>
+                  <p className="text-[11px] text-slate-600 leading-relaxed">
+                    To prevent man-in-the-middle attacks, obtain and verify the host key fingerprint
+                    directly on the target server console (e.g.{" "}
+                    <code className="bg-white px-1 py-0.5 rounded border border-blue-200 font-mono text-[10px]">
+                      ssh-keygen -l -f /etc/ssh/ssh_host_ed25519_key.pub
+                    </code>
+                    ). Never blindly trust unauthenticated network scans. Raw passwords and private keys are never stored.
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
